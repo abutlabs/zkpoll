@@ -227,6 +227,34 @@ make node-down          # stop the node when done
 The dev-node accounts use **public, well-known dev keys** (e.g. "Gerald") — local development only,
 never reuse on a real network.
 
+### Run the UI (independent frontend + backend)
+
+The chain is the database, so the backend is **not** a store — it's a **relayer + read API**:
+it submits the on-chain `vote()` tx (paying gas, so users need no crypto) and reads the live
+tally. It cannot forge or alter votes; the proof authenticates the voter and the on-chain
+nullifier stops double-votes. Frontend and backend are fully separate services.
+
+```
+Frontend (React, :5173) ──proof+choice──► Backend (relayer+API, :8787) ──vote()──► NLPoll (chain)
+        ▲ live tally ◄──────────────────────────── results ◄────────────────────────────┘
+```
+
+Four terminals (after `make node-up` and `make deploy-local`):
+
+```bash
+make node-up        # 1. local Moonriver-equivalent node
+make deploy-local   # 2. deploy + write deployments.local.json
+make backend        # 3. relayer + read API on http://localhost:8787
+make frontend       # 4. voting UI on  http://localhost:5173
+```
+
+Open **http://localhost:5173**. Because there's no real passport locally, the **Dev panel**
+stands in for the zkPassport scan: each "citizen" is a unique nullifier (click *New citizen* to
+become a fresh voter), and you can pick a nationality to watch non-Dutch votes get rejected
+on-chain. Vote twice as the same citizen to see the `AlreadyVoted` revert. Swapping in the real
+zkPassport SDK (a QR with `scope = pollId`, `mode: "compressed-evm"`) drops into the `SDK-SEAM`
+marked in `backend/server.js`.
+
 ### Project layout
 
 ```
@@ -234,8 +262,10 @@ src/NLPoll.sol                        the poll contract (nullifier ballot-box + 
 src/IZKPassportVerifier.sol           thin interface to the on-chain verifier
 test/mocks/MockZKPassportVerifier.sol test double standing in for real ZK proofs
 test/NLPoll.t.sol                     the guarantees, as executable tests
-script/DeployLocal.s.sol              deploy + open a poll on the local node
-Makefile                              test / node-up / deploy-local / node-down
+script/DeployLocal.s.sol              deploy + open a poll, write deployments.local.json
+backend/server.js                     relayer + read API (Express + viem)
+frontend/src/App.jsx                  voting UI (React + Vite)
+Makefile                              test / node-up / deploy-local / backend / frontend
 ```
 
 ---

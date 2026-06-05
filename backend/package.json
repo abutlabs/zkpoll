@@ -1,0 +1,16 @@
+{
+  "name": "zkpoll-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "zkpoll relayer + read API. Submits on-chain votes (paying gas) and serves the live tally.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "viem": "^2.21.0"
+  }
+}

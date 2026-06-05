@@ -9,3 +9,10 @@ broadcast/**/dry-run/
 # Env / secrets
 .env
 .env.*
+
+# Node deps & build output (frontend + backend)
+node_modules/
+frontend/dist/
+
+# Generated at deploy time (local contract addresses)
+deployments.local.json

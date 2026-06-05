@@ -10,7 +10,7 @@ RPC        := http://localhost:9944
 # Address: 0x6Be02d1d3665660d22FF9624b7BE0551ee1Ac91b
 DEV_KEY    := 0x99b3c12287537e38c90a9219d4cb074a89a16e9cdb20bf85728ebd97c343e342
 
-.PHONY: test build fmt node-up node-down node-logs deploy-local
+.PHONY: test build fmt node-up node-down node-logs deploy-local backend frontend
 
 build:
 	$(FORGE) build
@@ -34,7 +34,16 @@ node-logs:
 node-down:
 	-docker stop zkpoll-node
 
-# Deploy NLPoll + mock verifier to the running local node and open today's poll.
+# Deploy NLPoll + mock verifier to the running local node, open today's poll, and
+# write deployments.local.json (consumed by the backend/frontend).
 deploy-local:
 	$(FORGE) script script/DeployLocal.s.sol:DeployLocal \
 		--rpc-url $(RPC) --private-key $(DEV_KEY) --broadcast
+
+# The relayer + read API (independent backend, port 8787).
+backend:
+	cd backend && npm install && npm start
+
+# The voting UI (independent frontend, port 5173; proxies /api -> backend).
+frontend:
+	cd frontend && npm install && npm run dev

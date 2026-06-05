@@ -24,5 +24,15 @@ contract DeployLocal is Script {
         console.log("NLPoll:                ", address(poll));
         console.log("pollId (scope):");
         console.logBytes32(pollId);
+
+        // Emit a manifest the backend/frontend read to find the deployed contracts.
+        string memory o = "deployments";
+        vm.serializeAddress(o, "verifier", address(verifier));
+        vm.serializeAddress(o, "nlPoll", address(poll));
+        vm.serializeString(o, "rpc", "http://localhost:9944");
+        vm.serializeUint(o, "chainId", block.chainid);
+        vm.serializeString(o, "question", "Should the Netherlands ban consumer fireworks?");
+        string memory out = vm.serializeBytes32(o, "pollId", pollId);
+        vm.writeJson(out, "./deployments.local.json");
     }
 }
