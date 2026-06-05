@@ -1,14 +1,14 @@
-// zkpoll backend: the relayer + read API.
+// zkpoll backend: the relayer + read API. Network-aware.
 //
-// Role (important): the chain is the database. This backend does NOT store votes and
-// CANNOT forge them. It only (1) relays the on-chain vote() tx, paying gas so users need
-// no crypto, and (2) reads the live tally from the contract for the frontend.
+// Role (important): the chain is the database. This backend does NOT store votes and CANNOT
+// forge them. It only (1) relays the on-chain vote tx, paying gas so users need no crypto,
+// and (2) reads the live tally for the frontend.
 //
-// DEV MODE: we don't have real zkPassport proofs locally, so POST /api/vote accepts a
-// simulated voter { choice, nullifier, nationality } and builds the public signals the
-// real verifier would surface. In production this endpoint instead receives { proof,
-// publicInputs } from the zkPassport SDK and passes them straight to the contract — the
-// rest of the flow is identical. The swap-in point is marked SDK-SEAM below.
+//   NETWORK=local   -> NLPoll on the local Moonbeam/Moonriver dev node, MOCK verifier.
+//                      Dev "simulate citizen": POST /api/vote { choice, nullifier, nationality }.
+//   NETWORK=sepolia -> NLPollZK on Ethereum Sepolia, REAL zkPassport verifier.
+//                      The frontend's zkPassport SDK produces `params`; POST /api/vote-zk
+//                      { params, scope } and we relay NLPollZK.vote(params, scope).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -20,124 +20,171 @@ import {
   encodeAbiParameters, parseAbiParameters, stringToHex, padHex, toHex,
   BaseError, ContractFunctionRevertedError,
 } from "viem";
+import { sepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const manifest = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "..", "deployments.local.json"), "utf8")
-);
+const root = path.join(__dirname, "..");
+const NETWORK = process.env.NETWORK || "local";
 
-// Well-known PUBLIC Moonbeam dev account "Gerald" — LOCAL DEV ONLY, pre-funded.
-const RELAYER_KEY =
-  process.env.RELAYER_KEY ||
-  "0x99b3c12287537e38c90a9219d4cb074a89a16e9cdb20bf85728ebd97c343e342";
+// Minimal .env loader (sepolia needs RELAYER_KEY + SEPOLIA_RPC_URL from the repo-root .env).
+function loadEnv(file) {
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+}
+loadEnv(path.join(root, ".env"));
 
-const moonbeamDev = defineChain({
-  id: manifest.chainId,
-  name: "Moonbeam Dev (local)",
-  nativeCurrency: { name: "DEV", symbol: "DEV", decimals: 18 },
-  rpcUrls: { default: { http: [manifest.rpc] } },
-});
-
-const account = privateKeyToAccount(RELAYER_KEY);
-const publicClient = createPublicClient({ chain: moonbeamDev, transport: http(manifest.rpc) });
-const walletClient = createWalletClient({ account, chain: moonbeamDev, transport: http(manifest.rpc) });
-
-const NLPOLL_ABI = [
-  { type: "function", name: "vote", stateMutability: "nonpayable",
-    inputs: [
-      { name: "pollId", type: "bytes32" }, { name: "choice", type: "uint8" },
-      { name: "proof", type: "bytes" }, { name: "publicInputs", type: "bytes" },
-    ], outputs: [] },
-  { type: "function", name: "results", stateMutability: "view",
-    inputs: [{ name: "pollId", type: "bytes32" }], outputs: [{ type: "uint256[]" }] },
-  { type: "function", name: "polls", stateMutability: "view",
-    inputs: [{ name: "", type: "bytes32" }],
-    outputs: [
-      { name: "id", type: "bytes32" }, { name: "question", type: "string" },
-      { name: "numChoices", type: "uint8" }, { name: "exists", type: "bool" },
-    ] },
-  { type: "function", name: "hasVoted", stateMutability: "view",
-    inputs: [{ name: "pollId", type: "bytes32" }, { name: "nullifier", type: "uint256" }],
-    outputs: [{ type: "bool" }] },
-  // Custom errors — so viem decodes reverts to readable names (e.g. AlreadyVoted).
-  { type: "error", name: "AlreadyVoted", inputs: [] },
-  { type: "error", name: "NotDutchCitizen", inputs: [] },
-  { type: "error", name: "WrongPoll", inputs: [] },
-  { type: "error", name: "ProofInvalid", inputs: [] },
-  { type: "error", name: "InvalidChoice", inputs: [] },
-  { type: "error", name: "PollDoesNotExist", inputs: [] },
+const KNOWN_ERRORS = [
+  "AlreadyVoted", "NotDutchCitizen", "WrongPoll", "WrongChain", "ProofInvalid",
+  "InvalidScope", "InvalidChoice", "PollDoesNotExist",
 ];
-const nlPoll = { address: manifest.nlPoll, abi: NLPOLL_ABI };
+const ERROR_ABI = KNOWN_ERRORS.map((name) => ({ type: "error", name, inputs: [] }));
+
+// ---- Network configuration -------------------------------------------------
+let cfg;
+if (NETWORK === "sepolia") {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "deployments.sepolia.json"), "utf8"));
+  const key = process.env.RELAYER_KEY;
+  if (!key) throw new Error("RELAYER_KEY missing (set it in .env)");
+  cfg = {
+    manifest,
+    chain: sepolia,
+    rpc: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
+    key,
+    address: manifest.nlPollZK,
+    abi: [
+      { type: "function", name: "results", stateMutability: "view",
+        inputs: [{ name: "scope", type: "string" }], outputs: [{ type: "uint256[]" }] },
+      { type: "function", name: "vote", stateMutability: "nonpayable", inputs: [
+          { name: "params", type: "tuple", components: [
+            { name: "version", type: "bytes32" },
+            { name: "proofVerificationData", type: "tuple", components: [
+              { name: "vkeyHash", type: "bytes32" }, { name: "proof", type: "bytes" },
+              { name: "publicInputs", type: "bytes32[]" } ] },
+            { name: "committedInputs", type: "bytes" },
+            { name: "serviceConfig", type: "tuple", components: [
+              { name: "validityPeriodInSeconds", type: "uint256" }, { name: "domain", type: "string" },
+              { name: "scope", type: "string" }, { name: "devMode", type: "bool" } ] },
+          ] },
+          { name: "scope", type: "string" },
+        ], outputs: [] },
+      ...ERROR_ABI,
+    ],
+    pollKey: manifest.scope,
+  };
+} else {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "deployments.local.json"), "utf8"));
+  cfg = {
+    manifest,
+    chain: defineChain({ id: manifest.chainId, name: "Moonbeam Dev (local)",
+      nativeCurrency: { name: "DEV", symbol: "DEV", decimals: 18 },
+      rpcUrls: { default: { http: [manifest.rpc] } } }),
+    rpc: manifest.rpc,
+    // Well-known PUBLIC Moonbeam dev account "Gerald" — local dev only, pre-funded.
+    key: "0x99b3c12287537e38c90a9219d4cb074a89a16e9cdb20bf85728ebd97c343e342",
+    address: manifest.nlPoll,
+    abi: [
+      { type: "function", name: "results", stateMutability: "view",
+        inputs: [{ name: "pollId", type: "bytes32" }], outputs: [{ type: "uint256[]" }] },
+      { type: "function", name: "vote", stateMutability: "nonpayable", inputs: [
+          { name: "pollId", type: "bytes32" }, { name: "choice", type: "uint8" },
+          { name: "proof", type: "bytes" }, { name: "publicInputs", type: "bytes" } ], outputs: [] },
+      ...ERROR_ABI,
+    ],
+    pollKey: manifest.pollId,
+  };
+}
+
+const account = privateKeyToAccount(cfg.key);
+const publicClient = createPublicClient({ chain: cfg.chain, transport: http(cfg.rpc) });
+const walletClient = createWalletClient({ account, chain: cfg.chain, transport: http(cfg.rpc) });
+const contract = { address: cfg.address, abi: cfg.abi };
+
+function decodeError(e) {
+  if (e instanceof BaseError) {
+    const reverted = e.walk((err) => err instanceof ContractFunctionRevertedError);
+    if (reverted instanceof ContractFunctionRevertedError) {
+      return reverted.data?.errorName ?? reverted.signature ?? String(e.shortMessage);
+    }
+  }
+  return String(e.shortMessage || e.message);
+}
+
+async function readTally() {
+  return publicClient.readContract({ ...contract, functionName: "results", args: [cfg.pollKey] });
+}
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "2mb" })); // proofs can be sizeable
 
-// --- the daily poll + live tally (read straight from chain) ---
+// --- the daily poll + live tally ---
 app.get("/api/poll", async (_req, res) => {
   try {
-    const [counts] = await Promise.all([
-      publicClient.readContract({ ...nlPoll, functionName: "results", args: [manifest.pollId] }),
-    ]);
+    const counts = await readTally();
     res.json({
-      pollId: manifest.pollId,
-      question: manifest.question,
+      network: NETWORK,
+      mode: NETWORK === "sepolia" ? "zkpassport" : "mock",
+      question: cfg.manifest.question,
       choices: ["No", "Yes"],
       tally: counts.map((c) => Number(c)),
       total: counts.reduce((a, c) => a + Number(c), 0),
-      contract: manifest.nlPoll,
-      chainId: manifest.chainId,
+      contract: cfg.address,
+      chainId: cfg.manifest.chainId,
+      scope: cfg.manifest.scope || cfg.manifest.pollId, // SDK `scope` for the real flow
+      domain: cfg.manifest.domain || "localhost",
+      chainName: NETWORK === "sepolia" ? "ethereum_sepolia" : "local",
     });
   } catch (e) {
-    res.status(500).json({ error: String(e.shortMessage || e.message) });
+    res.status(500).json({ error: decodeError(e) });
   }
 });
 
-// --- cast a vote (relayer pays gas) ---
+// --- REAL flow: relay zkPassport params to NLPollZK on Sepolia ---
+app.post("/api/vote-zk", async (req, res) => {
+  if (NETWORK !== "sepolia") return res.status(400).json({ error: "vote-zk requires NETWORK=sepolia" });
+  try {
+    const { params, scope } = req.body;
+    if (!params || !scope) return res.status(400).json({ error: "params and scope required" });
+    await publicClient.simulateContract({ ...contract, functionName: "vote", args: [params, scope], account });
+    const hash = await walletClient.writeContract({ ...contract, functionName: "vote", args: [params, scope] });
+    await publicClient.waitForTransactionReceipt({ hash });
+    res.json({ ok: true, txHash: hash, explorer: `https://sepolia.etherscan.io/tx/${hash}` });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: decodeError(e) });
+  }
+});
+
+// --- DEV flow: simulated citizen on the local mock node ---
 app.post("/api/vote", async (req, res) => {
+  if (NETWORK !== "local") return res.status(400).json({ error: "use /api/vote-zk on sepolia" });
   try {
     const { choice } = req.body;
     if (choice !== 0 && choice !== 1) return res.status(400).json({ error: "choice must be 0 or 1" });
-
-    // SDK-SEAM ------------------------------------------------------------------
-    // Production: const { proof, publicInputs } = req.body  (from the zkPassport SDK)
-    // Dev: synthesize the signals a valid Dutch proof would produce.
     const nationality = (req.body.nationality || "NLD").toUpperCase();
-    // Each simulated "citizen" is a distinct nullifier; reuse one to test double-voting.
     const nullifier = BigInt(req.body.nullifier ?? Math.floor(Math.random() * 1e15));
     const nat3 = padHex(stringToHex(nationality), { size: 3, dir: "right" });
     const publicInputs = encodeAbiParameters(
       parseAbiParameters("bool, uint256, bytes3, bytes32"),
-      [true, nullifier, nat3, manifest.pollId]
+      [true, nullifier, nat3, cfg.pollKey]
     );
-    const proof = "0x"; // mock: empty; real proof bytes go here
-    // ---------------------------------------------------------------------------
-
-    // Simulate first so we can return a clean error (e.g. AlreadyVoted) instead of a raw revert.
     await publicClient.simulateContract({
-      ...nlPoll, functionName: "vote", args: [manifest.pollId, choice, proof, publicInputs], account,
-    });
+      ...contract, functionName: "vote", args: [cfg.pollKey, choice, "0x", publicInputs], account });
     const hash = await walletClient.writeContract({
-      ...nlPoll, functionName: "vote", args: [manifest.pollId, choice, proof, publicInputs],
-    });
+      ...contract, functionName: "vote", args: [cfg.pollKey, choice, "0x", publicInputs] });
     await publicClient.waitForTransactionReceipt({ hash });
     res.json({ ok: true, txHash: hash, nullifier: toHex(nullifier) });
   } catch (e) {
-    let error = String(e.shortMessage || e.message);
-    if (e instanceof BaseError) {
-      const reverted = e.walk((err) => err instanceof ContractFunctionRevertedError);
-      if (reverted instanceof ContractFunctionRevertedError) {
-        error = reverted.data?.errorName ?? reverted.signature ?? error;
-      }
-    }
-    res.status(400).json({ ok: false, error });
+    res.status(400).json({ ok: false, error: decodeError(e) });
   }
 });
 
 const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => {
-  console.log(`zkpoll backend on http://localhost:${PORT}`);
-  console.log(`  relayer ${account.address}`);
-  console.log(`  NLPoll  ${manifest.nlPoll}  @ ${manifest.rpc}`);
+  console.log(`zkpoll backend [${NETWORK}] on http://localhost:${PORT}`);
+  console.log(`  relayer  ${account.address}`);
+  console.log(`  contract ${cfg.address}  @ ${cfg.rpc}`);
 });

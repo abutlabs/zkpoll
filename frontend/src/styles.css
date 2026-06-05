@@ -71,3 +71,14 @@ h2 { margin: 0 0 20px; font-size: 20px; line-height: 1.35; }
 select { background: #0a1120; color: var(--text); border: 1px solid var(--line); padding: 6px 10px; border-radius: 8px; }
 
 footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+footer a { color: var(--accent); }
+
+.net { margin-left: auto; align-self: flex-start; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.net.live { background: #102a22; color: var(--yes); border: 1px solid #1c5a44; }
+.net.dev { background: #0e1626; color: var(--muted); border: 1px solid var(--line); }
+
+.zk-lead { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+.dev-toggle { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 12.5px; }
+.zk-scan { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.zk-choice-pill { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
+.zk-choice-pill b { color: var(--yes); }

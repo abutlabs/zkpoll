@@ -251,21 +251,50 @@ make frontend       # 4. voting UI on  http://localhost:5173
 Open **http://localhost:5173**. Because there's no real passport locally, the **Dev panel**
 stands in for the zkPassport scan: each "citizen" is a unique nullifier (click *New citizen* to
 become a fresh voter), and you can pick a nationality to watch non-Dutch votes get rejected
-on-chain. Vote twice as the same citizen to see the `AlreadyVoted` revert. Swapping in the real
-zkPassport SDK (a QR with `scope = pollId`, `mode: "compressed-evm"`) drops into the `SDK-SEAM`
-marked in `backend/server.js`.
+on-chain. Vote twice as the same citizen to see the `AlreadyVoted` revert.
+
+### Run against REAL zkPassport on Sepolia
+
+The same UI adapts when the backend points at the real contract — instead of the dev panel it
+renders the zkPassport QR for an actual passport/ID scan. zkPassport's verifier + certificate
+registry are deployed on Ethereum Sepolia (not on Moonbeam/Moonriver — see
+[Choosing a chain](#choosing-a-chain)), so the on-chain *real-proof* target is Sepolia.
+
+The contract is **`NLPollZK.sol`**: it `verify()`s the proof against the deployed verifier
+(`0x1D000001000EFD9a6371f4d90bB8920D5431c0D8`, the same address on every network), gates Dutch
+citizenship via `isNationalityIn(["NLD"])`, checks the bound chain, and reads the **bound vote
+choice from `custom_data`** so the gasless relayer can't tamper with it.
+
+```bash
+# .env must have SEPOLIA_RPC_URL and a funded RELAYER_KEY (a throwaway testnet key)
+make deploy-sepolia     # deploy NLPollZK + open the poll → deployments.sepolia.json
+make backend-sepolia    # relayer + read API, NETWORK=sepolia
+make frontend           # same UI; now shows the real zkPassport QR
+```
+
+Flow: pick **Yes/No** → the QR encodes a request that **binds your choice** + `chain:
+ethereum_sepolia` + proves nationality ∈ {NLD}, `mode: compressed-evm` → scan with the
+**zkPassport app** → `onResult` formats the proof via `getSolidityVerifierParameters` → the
+backend relays `NLPollZK.vote(params, scope)` and the live tally moves.
+
+Still needed for an end-to-end *real* vote: a **zkPassport dashboard account** + the domain the
+SDK uses (currently `localhost`, changeable via `setDomain`), and a real **Dutch NFC passport/ID**
+(mock passports fail the on-chain certificate-root check, so a genuine Dutch ID is required).
 
 ### Project layout
 
 ```
-src/NLPoll.sol                        the poll contract (nullifier ballot-box + tally)
-src/IZKPassportVerifier.sol           thin interface to the on-chain verifier
-test/mocks/MockZKPassportVerifier.sol test double standing in for real ZK proofs
-test/NLPoll.t.sol                     the guarantees, as executable tests
-script/DeployLocal.s.sol              deploy + open a poll, write deployments.local.json
-backend/server.js                     relayer + read API (Express + viem)
-frontend/src/App.jsx                  voting UI (React + Vite)
-Makefile                              test / node-up / deploy-local / backend / frontend
+src/NLPoll.sol                        local-demo poll contract (mock verifier)
+src/IZKPassportVerifier.sol           interface for the local mock verifier
+src/NLPollZK.sol                      REAL poll contract — verifies live zkPassport proofs
+src/zkpassport/IZKPassport.sol        vendored zkPassport verifier/helper interfaces + structs
+test/NLPoll.t.sol                     local-demo guarantees (8 tests)
+test/NLPollZK.t.sol                   real-contract guarantees via mock verifier+helper (9 tests)
+script/DeployLocal.s.sol              deploy to the local node → deployments.local.json
+script/DeploySepolia.s.sol            deploy NLPollZK to Sepolia → deployments.sepolia.json
+backend/server.js                     network-aware relayer + read API (local mock | sepolia real)
+frontend/src/App.jsx                  voting UI; MockVote.jsx (local) | ZKVote.jsx (real QR)
+Makefile                              test / node-up / deploy-* / backend(-sepolia) / frontend
 ```
 
 ---

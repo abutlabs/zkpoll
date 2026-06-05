@@ -10,7 +10,7 @@ RPC        := http://localhost:9944
 # Address: 0x6Be02d1d3665660d22FF9624b7BE0551ee1Ac91b
 DEV_KEY    := 0x99b3c12287537e38c90a9219d4cb074a89a16e9cdb20bf85728ebd97c343e342
 
-.PHONY: test build fmt node-up node-down node-logs deploy-local backend frontend
+.PHONY: test build fmt node-up node-down node-logs deploy-local deploy-sepolia backend backend-sepolia frontend
 
 build:
 	$(FORGE) build
@@ -40,10 +40,21 @@ deploy-local:
 	$(FORGE) script script/DeployLocal.s.sol:DeployLocal \
 		--rpc-url $(RPC) --private-key $(DEV_KEY) --broadcast
 
+# Deploy NLPollZK (real zkPassport verifier) to Sepolia and open the poll. Reads .env.
+deploy-sepolia:
+	set -a; . ./.env; set +a; \
+	$(FORGE) script script/DeploySepolia.s.sol:DeploySepolia \
+		--rpc-url $$SEPOLIA_RPC_URL --private-key $$RELAYER_KEY --broadcast
+
 # The relayer + read API (independent backend, port 8787).
+# Local mock node:
 backend:
 	cd backend && npm install && npm start
+# Real Sepolia (relays real zkPassport proofs; reads RELAYER_KEY/SEPOLIA_RPC_URL from .env):
+backend-sepolia:
+	cd backend && npm install && NETWORK=sepolia npm start
 
-# The voting UI (independent frontend, port 5173; proxies /api -> backend).
+# The voting UI (independent frontend, port 5173; proxies /api -> backend on :8787).
+# Same UI for both modes — it adapts based on what the backend reports.
 frontend:
 	cd frontend && npm install && npm run dev

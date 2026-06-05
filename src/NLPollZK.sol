@@ -86,10 +86,11 @@ contract NLPollZK {
 
     /// @notice Cast a vote with a real zkPassport proof. Any submitter may relay it; the proof
     ///         authenticates the voter and the bound `custom_data` fixes the choice.
-    /// @param params   built by the SDK's `getSolidityVerifierParameters(...)`.
-    /// @param scope    the poll's scope string (must match the proof and an open poll).
-    /// @param isIDCard true if the document is an ID card / residence permit (TD1), false for a passport (TD3).
-    function vote(ProofVerificationParams calldata params, string calldata scope, bool isIDCard) external {
+    /// @param params built by the SDK's `getSolidityVerifierParameters(...)`.
+    /// @param scope  the poll's scope string (must match the proof and an open poll).
+    /// @dev We gate nationality via `isNationalityIn` (which is document-type agnostic), so no
+    ///      `isIDCard` flag is needed here — unlike `getDisclosedData`, whose MRZ offsets differ.
+    function vote(ProofVerificationParams calldata params, string calldata scope) external {
         bytes32 pollKey = keccak256(bytes(scope));
         Poll memory poll = polls[pollKey];
         if (!poll.exists) revert PollDoesNotExist();

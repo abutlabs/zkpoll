@@ -9,11 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@zkpassport/sdk": "^0.15.1",
+    "@zkpassport/ui": "^0.15.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vite-plugin-node-polyfills": "^0.28.0"
   }
 }
