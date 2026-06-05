@@ -68,7 +68,8 @@ There is **no Postgres and no backend to trust**. The smart contract's storage i
        │ vote(pollId, choice, proof, publicInputs)   (via gasless relayer)
        ▼
 ┌─────────────────────────────────────────────┐
-│  NLPoll.sol  (on Base / an L2)               │
+│  NLPoll.sol  (Moonbase Alpha → Moonriver/    │
+│              Moonbeam)                        │
 │  • verifier.verifyProof(...)   ← the math    │
 │  • require nationality signal == "NLD"       │
 │  • require age ≥ 18 (optional)               │
@@ -111,6 +112,49 @@ The proof's public signals carry: the **nullifier**, the **disclosed nationality
 
 ---
 
+## Choosing a chain
+
+One hard constraint decides this: zkPassport's on-chain verifier is a Solidity contract whose
+proof check calls the **`bn254` pairing precompiles** (`0x06/0x07/0x08`, EIP-196/197). `bn254` is
+the *only* pairing-friendly curve enshrined as an EVM precompile, and Groth16/PlonK/Honk
+verification is infeasible without it. So the chain must be a **Frontier-style EVM that ships those
+precompiles**. That splits the Polkadot/Kusama world cleanly:
+
+| Option | Ecosystem | Runs zkPassport verifier? | Notes |
+|---|---|---|---|
+| **Moonbase Alpha** | Moonbeam/Moonriver **testnet** | ✅ Yes — full bn254 precompiles | Free faucet `DEV` tokens; **where we start** |
+| **Moonriver** | **Kusama** parachain | ✅ Yes | Canary net, cheapest, "move-fast" ethos — launch target |
+| **Moonbeam** | Polkadot parachain | ✅ Yes | Production-grade, shared Polkadot security — graduation target |
+| **Astar / Shiden** | Polkadot / Kusama | ✅ Yes (Frontier EVM) | Fine; Astar is migrating toward Polkadot Hub |
+| **Polkadot Hub** (PolkaVM / `revive`) | Polkadot native | ❌ **No** | "Solidity-compatible" but **not EVM** — compiles to RISC-V PolkaVM with **no bn254 pairing precompile**. The verifier cannot run here today. |
+| Base / Optimism / Arbitrum | Ethereum L2 | ✅ Yes | Cheapest + most battle-tested; what zkPassport documents. Not Polkadot. |
+
+> ⚠️ **The PolkaVM trap:** the new Polkadot Hub path is *Solidity-compatible* but *not EVM-compatible*
+> — it has no `bn254` pairing precompile, so the zkPassport verifier won't execute there (a
+> pure-Solidity pairing fallback would cost tens of millions of gas). "Deploy on Polkadot itself"
+> is off the table until that precompile is enshrined. **Moonbeam (Polkadot)** and **Moonriver
+> (Kusama)** run the verifier *unmodified* with relay-chain shared security — that's the route.
+
+### Gas is not the bottleneck
+
+With SDK `mode: "compressed-evm"`, a verified vote lands around **~500k–1.5M gas**:
+
+- **Moonriver (Kusama):** ~1 gwei × ~1M gas ≈ **<$0.01 / vote**
+- **Moonbeam (Polkadot):** ~31 gwei × ~1M gas ≈ **~$0.003–0.01 / vote**
+
+A **$20–100 sponsorship buys ~2,000–30,000 votes**. The real constraint is app-install / NFC-scan
+onboarding friction, not chain fees — so don't over-optimize the chain.
+
+**Sponsoring it (the temporary funded-relayer model):** no ERC-4337 paymaster needed. Fund a single
+**relayer wallet** with $20–100 of `DEV`/`MOVR`/`GLMR`; it submits each vote tx and pays gas. Bind
+the vote choice into the proof (`.bind(...)`) so the relayer can't tamper. When the budget runs out,
+voting simply pauses until topped up.
+
+**Plan: build + prove on Moonbase Alpha (free) → launch on Moonriver (Kusama) → graduate to Moonbeam
+(Polkadot) for the "official" Netherlands deployment.**
+
+---
+
 ## Do you trust government voting, or the math behind ZK proofs?
 
 Honest answer: **the math is more trustworthy than the math is *complete*.** What ZK buys you, and the gap that remains:
@@ -134,7 +178,7 @@ Honest answer: **the math is more trustworthy than the math is *complete*.** Wha
 
 ## Netherlands kickoff plan
 
-1. **Contract** `NLPoll.sol` on **Base Sepolia** (testnet, free) → then Base mainnet. Inherit `AQueryProofExecutor`, enforce `nationality == NLD`, `scope == pollId`, `usedNullifiers`.
+1. **Contract** `NLPoll.sol` on **Moonbase Alpha** (free testnet) → **Moonriver** (Kusama) → **Moonbeam** (Polkadot). Inherit `AQueryProofExecutor`, enforce `nationality == NLD`, `scope == pollId`, `usedNullifiers`. (See [Choosing a chain](#choosing-a-chain) for why Polkadot Hub / PolkaVM can't host the verifier yet.)
 2. **Frontend**: static site on the `.nl` domain, `@zkpassport/ui` verify button, `scope: pollId`, `mode: "compressed-evm"`, bind the vote choice.
 3. **Relayer**: a tiny gasless submitter (or ERC-4337 paymaster) so voting is free for citizens.
 4. **Results**: a subgraph indexes `Voted` events → live tally page, no backend.
