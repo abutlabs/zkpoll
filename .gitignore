@@ -1,0 +1,11 @@
+# Foundry build artifacts
+out/
+cache/
+broadcast/
+
+# Foundry deployment caches we don't want to track
+broadcast/**/dry-run/
+
+# Env / secrets
+.env
+.env.*

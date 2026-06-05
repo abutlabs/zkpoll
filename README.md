@@ -184,7 +184,59 @@ Honest answer: **the math is more trustworthy than the math is *complete*.** Wha
 4. **Results**: a subgraph indexes `Voted` events → live tally page, no backend.
 5. **One question a day**, with an OG share card: *"X% of verified Dutch citizens said YES today — provably. 🇳🇱"*
 
-A good first milestone: write **`NLPoll.sol` plus a Foundry test that proves the double-vote revert** — watching the second vote bounce off the same nullifier in a passing test is the most convincing way to *feel* the guarantee.
+A good first milestone: write **`NLPoll.sol` plus a Foundry test that proves the double-vote revert** — watching the second vote bounce off the same nullifier in a passing test is the most convincing way to *feel* the guarantee. **(Done — see below.)**
+
+---
+
+## Local development
+
+A two-layer loop. The fast inner loop is Foundry unit tests against a **mock verifier**; the
+integration loop is a **local Moonbeam dev node** — which *is* the local Moonriver-equivalent EVM
+(same Frontier EVM + `bn254` precompiles). Wiring the real zkPassport verifier (real / `devMode`
+proofs) is the follow-up integration step; the mock proves the entire poll mechanism today.
+
+**Prerequisites:** [Foundry](https://book.getfoundry.sh/) (`curl -L https://foundry.paradigm.xyz | bash && foundryup`) and Docker.
+
+```bash
+# 1. Unit tests — proves the one-vote-per-poll guarantee (incl. the double-vote revert)
+make test
+
+# 2. Start the local Moonriver-equivalent node (chainId 1281, blocks every 1s)
+make node-up            # uses --platform linux/amd64 (works on Apple Silicon via emulation)
+
+# 3. Deploy NLPoll + mock verifier and open today's poll
+make deploy-local
+
+# 4. (then cast votes with `cast send ... "vote(bytes32,uint8,bytes,bytes)"`)
+
+make node-down          # stop the node when done
+```
+
+**What the tests prove** (`test/NLPoll.t.sol`):
+
+| Test | Guarantee |
+|---|---|
+| `test_DutchCitizenCanVoteOnce` | A verified Dutch citizen's vote is counted |
+| `test_RevertWhen_SameCitizenVotesTwice` | Same passport → same nullifier → **second vote reverts**, tally unchanged |
+| `test_TwoDifferentCitizensBothCount` | Distinct citizens → distinct nullifiers → both count |
+| `test_RevertWhen_NotDutchCitizen` | Non-NLD nationality rejected on-chain |
+| `test_RevertWhen_ProofInvalid` | Cryptographically invalid proof rejected |
+| `test_RevertWhen_ProofBoundToWrongPoll` | A proof bound to another poll's `scope` can't be replayed |
+| `test_SameCitizenCanVoteOnNextDaysPoll` | New poll → new `scope` → new nullifier → may vote again |
+
+The dev-node accounts use **public, well-known dev keys** (e.g. "Gerald") — local development only,
+never reuse on a real network.
+
+### Project layout
+
+```
+src/NLPoll.sol                        the poll contract (nullifier ballot-box + tally)
+src/IZKPassportVerifier.sol           thin interface to the on-chain verifier
+test/mocks/MockZKPassportVerifier.sol test double standing in for real ZK proofs
+test/NLPoll.t.sol                     the guarantees, as executable tests
+script/DeployLocal.s.sol              deploy + open a poll on the local node
+Makefile                              test / node-up / deploy-local / node-down
+```
 
 ---
 
