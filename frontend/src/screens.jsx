@@ -12,6 +12,13 @@ export function Landing({ onEnter }) {
           <NLMark s={24} />
         </div>
 
+        <div className="card" style={{ marginTop: 16, padding: "12px 14px", borderColor: "color-mix(in oklch, var(--accent) 30%, var(--line-soft))", display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1 }}><Ic.lock s={16} /></span>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>
+            <b style={{ color: "var(--text)" }}>Early preview.</b> This shows how it will work. On-chain voting isn't connected yet — nothing here casts a real vote or records real results.
+          </div>
+        </div>
+
         <div style={{ flex: 1, minHeight: 24 }} />
 
         <div className="rise" style={{ marginTop: 40 }}>
@@ -69,7 +76,7 @@ export function Ballot({ tallies, staged, cast, onPick, onCast, onRecount, onRep
         <div className="pad top">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
             <Wordmark size={20} />
-            <span className="chip"><span style={{ color: "var(--yes)" }}><Ic.shield s={13} /></span> verified citizens</span>
+            <span className="chip" style={{ color: "var(--accent)", borderColor: "color-mix(in oklch, var(--accent) 40%, transparent)" }}>preview</span>
           </div>
 
           <div className="card" style={{ marginTop: 18, padding: 20 }}>
@@ -79,19 +86,16 @@ export function Ballot({ tallies, staged, cast, onPick, onCast, onRecount, onRep
                 <div className="eyebrow" style={{ color: "var(--muted)" }}>{ELECTION.country}</div>
                 <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", marginTop: 2 }}>{ELECTION.title}</div>
               </div>
-              <span className="chip" style={{ color: "var(--yes)", borderColor: "color-mix(in oklch, var(--yes) 35%, transparent)" }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--yes)" }} /> live
-              </span>
             </div>
 
             <p style={{ color: "var(--muted)", fontSize: 13.5, lineHeight: 1.5, margin: "14px 0 0" }}>
-              Always open — no fixed end date. Verified Dutch citizens only; every answer is provable on-chain.
+              How it will work: verified Dutch citizens only, every answer provable on-chain. Voting isn't connected yet — these counts are real and start at zero.
             </p>
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <Stat value={fmt(totalAnswers)} unit="verified answers" live />
+              <Stat value={fmt(totalAnswers)} unit="real votes so far" />
               <div style={{ width: 1, background: "var(--line-soft)" }} />
-              <Stat value={`${QUESTIONS.length}`} unit="questions open" />
+              <Stat value={`${QUESTIONS.length}`} unit="questions" />
             </div>
           </div>
 
@@ -131,10 +135,10 @@ export function Ballot({ tallies, staged, cast, onPick, onCast, onRecount, onRep
           background: "linear-gradient(to top, var(--bg) 58%, transparent)" }}>
           <div style={{ maxWidth: 560, margin: "0 auto" }}>
             <button className="btn btn-primary" onClick={onCast}>
-              <Ic.passport s={18} /> {`Verify & cast ${stagedCount} ${stagedCount === 1 ? "answer" : "answers"}`}
+              <Ic.passport s={18} /> {`Preview the verify flow · ${stagedCount}`}
             </button>
             <p style={{ textAlign: "center", color: "var(--faint)", fontSize: 12, margin: "10px 0 0" }}>
-              One zkPassport scan casts your whole ballot. Editable until you verify.
+              A walkthrough of how casting will work. No real vote is cast yet.
             </p>
           </div>
         </div>

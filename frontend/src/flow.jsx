@@ -62,7 +62,7 @@ function MobileIntro({ answers, reattempt, onGo }) {
   const n = answers.length;
   return (
     <div className="rise" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-      <div className="eyebrow">{reattempt ? "Re-submitting your ballot" : "Casting your ballot"}</div>
+      <div className="eyebrow">Preview · {reattempt ? "re-submitting your ballot" : "how casting will work"}</div>
       <div style={{ fontSize: 29, fontWeight: 700, letterSpacing: "-0.02em", margin: "10px 0 18px" }}>
         {n} answer{n === 1 ? "" : "s"}, one proof
       </div>
@@ -267,9 +267,9 @@ function Success({ answers, onRecount, onDone, compact }) {
   return (
     <div style={{ flex: compact ? "none" : 1, display: "flex", flexDirection: "column" }}>
       <div style={{ flex: compact ? "none" : 1, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: compact ? 8 : 24 }}>
-        <span style={{ width: 76, height: 76, borderRadius: 999, background: "var(--yes)", color: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", animation: "pop .5s cubic-bezier(.2,.7,.2,1) both", flexShrink: 0 }}><Ic.check s={40} /></span>
-        <div className="rise" style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", marginTop: 22 }}>Ballot counted on-chain</div>
-        <div className="rise" style={{ color: "var(--muted)", fontSize: 15, marginTop: 8, maxWidth: 290, lineHeight: 1.5 }}>{n} answer{n === 1 ? "" : "s"} recorded in the {ELECTION.country} poll — each with its own nullifier.</div>
+        <span style={{ width: 76, height: 76, borderRadius: 999, background: "var(--surface)", color: "var(--accent)", border: "1px solid color-mix(in oklch, var(--accent) 40%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", animation: "pop .5s cubic-bezier(.2,.7,.2,1) both", flexShrink: 0 }}><Ic.lock s={36} /></span>
+        <div className="rise" style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", marginTop: 22 }}>That's the flow — a preview</div>
+        <div className="rise" style={{ color: "var(--muted)", fontSize: 15, marginTop: 8, maxWidth: 300, lineHeight: 1.5 }}><b style={{ color: "var(--text)" }}>No real vote was cast</b> and nothing was written on-chain. When voting goes live, this exact flow records your {n} answer{n === 1 ? "" : "s"} for real — one nullifier each.</div>
         <div className="card rise" style={{ width: "100%", marginTop: 24, textAlign: "left", display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
           {answers.map((a, i) => (
             <div key={a.qid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}>
@@ -282,7 +282,7 @@ function Success({ answers, onRecount, onDone, compact }) {
             </div>
           ))}
         </div>
-        <div style={{ color: "var(--faint)", fontSize: 12.5, marginTop: 12, lineHeight: 1.5, maxWidth: 320 }}>These nullifiers are now spent. The same passport can't cast a second ballot in this poll.</div>
+        <div style={{ color: "var(--faint)", fontSize: 12.5, marginTop: 12, lineHeight: 1.5, maxWidth: 320 }}>The nullifiers above are illustrative — on-chain voting isn't connected yet. Once it is, the same passport can't cast a second ballot.</div>
       </div>
       <div className="bottom-safe" style={{ paddingTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
         <button className="btn btn-primary" onClick={onRecount}><Ic.chain s={18} /> Recount it yourself</button>
