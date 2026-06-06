@@ -1,22 +1,19 @@
-name: Deploy klopthet to GitHub Pages
+name: Deploy to GitHub Pages
 
-# Builds the static front-end (frontend/) and publishes it to GitHub Pages.
-# Serves at klopthet.nl via the CNAME in frontend/public/CNAME.
+# Replicates the austinkloske22/community-movies deploy pipeline (official Pages flow:
+# upload-pages-artifact -> deploy-pages), adapted for this repo's Vite app in frontend/.
+# Serves at https://abutlabs.github.io/zkpoll/ until klopthet.nl DNS is connected.
 
 on:
   push:
     branches: [main]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy.yml"
-  workflow_dispatch: {}
+  workflow_dispatch: # Manual trigger
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow one concurrent deployment; don't cancel an in-progress run.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -28,16 +25,29 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true # turn Pages on automatically if it isn't already
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist
 
@@ -48,5 +58,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
