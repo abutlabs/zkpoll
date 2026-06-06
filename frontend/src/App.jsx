@@ -1,90 +1,94 @@
-import React, { useEffect, useState, useCallback } from "react";
-import MockVote from "./MockVote.jsx";
-import ZKVote from "./ZKVote.jsx";
+// App.jsx — one responsive experience. Platform is detected (not staged in device frames):
+//   phone browser  → verify on-device (deep-link to zkPassport)
+//   desktop browser → verify via QR, approve remotely. (Like DigiD.)
+import React, { useState, useMemo, useEffect } from "react";
+import { Landing, Ballot, Recount } from "./screens.jsx";
+import { VerifySheet } from "./flow.jsx";
+import { QUESTIONS, baseTallies, seedLedger, newNullifier } from "./kit.jsx";
+
+function detectPlatform() {
+  if (typeof window === "undefined") return "mobile";
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const narrow = window.matchMedia("(max-width: 720px)").matches;
+  return coarse || narrow ? "mobile" : "desktop";
+}
+
+function usePlatform() {
+  const [platform, setPlatform] = useState(detectPlatform);
+  useEffect(() => {
+    const onResize = () => setPlatform(detectPlatform());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return platform;
+}
 
 export default function App() {
-  const [poll, setPoll] = useState(null);
-  const [err, setErr] = useState(null);
+  const platform = usePlatform();
+  const desktop = platform === "desktop";
 
-  const load = useCallback(async () => {
-    try {
-      const r = await fetch("/api/poll");
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error);
-      setPoll(j);
-      setErr(null);
-    } catch (e) {
-      setErr(String(e.message || e));
+  const [route, setRoute] = useState("landing");       // landing | ballot | recount
+  const [tallies, setTallies] = useState(baseTallies); // { qid: number[] }
+  const [staged, setStaged] = useState({});            // { qid: choiceIdx } not yet cast
+  const [cast, setCast] = useState({});                // { qid: { choice, nullifier } }
+  const [verify, setVerify] = useState(null);          // null | { answers, alreadyUsed }
+  const ledger = useMemo(() => seedLedger(8), []);
+
+  const pick = (qid, choice) => {
+    if (cast[qid] !== undefined) return;
+    setStaged((prev) => ({ ...prev, [qid]: choice }));
+  };
+
+  const startCast = () => {
+    const answers = Object.entries(staged).map(([qid, choice]) => {
+      const q = QUESTIONS.find((x) => x.id === qid);
+      return { qid, short: q.short, choice, label: q.choices[choice], color: q.colors[choice], nullifier: newNullifier() };
+    });
+    setVerify({ answers, alreadyUsed: false });
+  };
+
+  const tryAgain = () => {
+    const answers = Object.entries(cast).map(([qid, v]) => {
+      const q = QUESTIONS.find((x) => x.id === qid);
+      return { qid, short: q.short, choice: v.choice, label: q.choices[v.choice], color: q.colors[v.choice], nullifier: v.nullifier };
+    });
+    setVerify({ answers, alreadyUsed: true });
+  };
+
+  const handleResult = (kind, payload, dest) => {
+    if (kind === "success" && verify && !verify.alreadyUsed) {
+      setTallies((prev) => {
+        const next = { ...prev };
+        verify.answers.forEach((a) => { next[a.qid] = [...next[a.qid]]; next[a.qid][a.choice] += 1; });
+        return next;
+      });
+      setCast((prev) => {
+        const next = { ...prev };
+        verify.answers.forEach((a) => { next[a.qid] = { choice: a.choice, nullifier: a.nullifier }; });
+        return next;
+      });
+      setStaged({});
     }
-  }, []);
+    setVerify(null);
+    if (dest) setRoute(dest);
+  };
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 3000); // live tally
-    return () => clearInterval(t);
-  }, [load]);
-
-  const total = poll?.total ?? 0;
-  const pct = (i) => (total === 0 ? 0 : Math.round((100 * poll.tally[i]) / total));
-  const isReal = poll?.mode === "zkpassport";
+  const replay = () => { setStaged({}); setCast({}); setTallies(baseTallies()); setRoute("ballot"); };
 
   return (
-    <div className="wrap">
-      <header>
-        <span className="flag">🇳🇱</span>
-        <div>
-          <h1>zkpoll</h1>
-          <p className="sub">One question a day · verified Dutch citizens only · counted on-chain</p>
-        </div>
-        {poll && (
-          <span className={`net ${isReal ? "live" : "dev"}`}>
-            {isReal ? "Sepolia · real zkPassport" : "local · mock"}
-          </span>
-        )}
-      </header>
-
-      {err && <div className="banner err">Backend unreachable: {err}</div>}
-
-      {poll && (
-        <main>
-          <div className="card">
-            <h2>{poll.question}</h2>
-
-            <div className="bars">
-              {poll.choices.map((label, i) => (
-                <div className="bar-row" key={i}>
-                  <div className="bar-label">
-                    <span>{label}</span>
-                    <span className="count">{poll.tally[i]} · {pct(i)}%</span>
-                  </div>
-                  <div className="bar-track">
-                    <div className={`bar-fill c${i}`} style={{ width: `${pct(i)}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {isReal
-              ? <ZKVote poll={poll} onVoted={load} />
-              : <MockVote poll={poll} onVoted={load} />}
-
-            <p className="total">{total} verified vote{total === 1 ? "" : "s"} so far</p>
-          </div>
-
-          <footer>
-            <span>
-              contract {poll.contract.slice(0, 8)}… · chain {poll.chainId}
-              {isReal && (
-                <>
-                  {" · "}
-                  <a href={`https://sepolia.etherscan.io/address/${poll.contract}`} target="_blank" rel="noreferrer">
-                    etherscan
-                  </a>
-                </>
-              )}
-            </span>
-          </footer>
-        </main>
+    <div className={"app" + (desktop ? " desktop" : "")}>
+      {route === "landing" && <Landing onEnter={() => setRoute("ballot")} />}
+      {route === "ballot" && (
+        <Ballot tallies={tallies} staged={staged} cast={cast} onPick={pick} onCast={startCast}
+          onRecount={() => setRoute("recount")} onReplay={replay} />
+      )}
+      {route === "recount" && (
+        <Recount tallies={tallies} ledger={ledger} cast={cast}
+          onBack={() => setRoute("ballot")} onTryAgain={tryAgain} />
+      )}
+      {verify && (
+        <VerifySheet platform={platform} answers={verify.answers} alreadyUsed={verify.alreadyUsed}
+          onClose={() => setVerify(null)} onResult={handleResult} />
       )}
     </div>
   );
