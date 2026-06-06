@@ -1,6 +1,6 @@
 // screens.jsx — Landing, Ballot (home), Recount
 import React from "react";
-import { Ic, Wordmark, NLMark, fmt, CONTRACT, CONTRACT_FULL, CHAIN, ELECTION, QUESTIONS } from "./kit.jsx";
+import { Ic, Wordmark, NLMark, fmt, CONTRACT, CONTRACT_FULL, CHAIN, ETHERSCAN, ELECTION, QUESTIONS } from "./kit.jsx";
 
 /* ── Landing / first-time explainer ──────────────────────────── */
 export function Landing({ onEnter }) {
@@ -15,12 +15,12 @@ export function Landing({ onEnter }) {
         <div style={{ flex: 1, minHeight: 24 }} />
 
         <div className="rise" style={{ marginTop: 40 }}>
-          <div className="eyebrow">National opinion poll · Netherlands</div>
+          <div className="eyebrow">Live opinion poll · Netherlands</div>
           <h1 style={{ fontSize: 37, lineHeight: 1.06, fontWeight: 700, letterSpacing: "-0.03em", margin: "14px 0 0", textWrap: "balance" }}>
             What does the country <span style={{ color: "var(--accent)" }}>actually</span> think?
           </h1>
           <p style={{ fontSize: 16, color: "var(--muted)", lineHeight: 1.55, marginTop: 16, maxWidth: 360 }}>
-            One ballot, open for three months. Every answer is proven to come from a unique, real Dutch citizen — and the whole tally lives on-chain, where anyone can recount it.
+            A live poll answered by real, verified citizens. Every answer is proven to come from a unique Dutch citizen — no bots, no duplicates, no server to trust. The whole tally lives on-chain, so anyone can recount it. <span style={{ color: "var(--text)" }}>More trustworthy than an election — because you can check the math yourself.</span>
           </p>
         </div>
 
@@ -36,6 +36,7 @@ export function Landing({ onEnter }) {
           <button className="btn btn-primary" onClick={onEnter}>See the ballot <Ic.arrow s={18} /></button>
           <p style={{ textAlign: "center", color: "var(--faint)", fontSize: 12, marginTop: 14, lineHeight: 1.5 }}>
             Results read <span className="mono">% of <span style={{ color: "var(--muted)" }}>verified</span> Dutch citizens</span>, not of everyone.
+            <br />Early preview — live on-chain voting is being connected; counts are real and start at zero.
           </p>
         </div>
       </div>
@@ -59,8 +60,8 @@ function Step({ icon, title, body }) {
 export function Ballot({ tallies, staged, cast, onPick, onCast, onRecount, onReplay }) {
   const castCount = Object.keys(cast).length;
   const stagedCount = Object.keys(staged).length;
-  const elapsed = Math.max(2, ELECTION.windowDays - ELECTION.daysLeft);
-  const winPct = Math.round((elapsed / ELECTION.windowDays) * 100);
+  // Real numbers only — the total comes straight from the live counts (starts at zero).
+  const totalAnswers = Object.values(tallies).reduce((a, t) => a + t.reduce((x, c) => x + c, 0), 0);
 
   return (
     <React.Fragment>
@@ -76,24 +77,21 @@ export function Ballot({ tallies, staged, cast, onPick, onCast, onRecount, onRep
               <NLMark s={30} />
               <div style={{ flex: 1 }}>
                 <div className="eyebrow" style={{ color: "var(--muted)" }}>{ELECTION.country}</div>
-                <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", marginTop: 2 }}>{ELECTION.title} 2026</div>
+                <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", marginTop: 2 }}>{ELECTION.title}</div>
               </div>
+              <span className="chip" style={{ color: "var(--yes)", borderColor: "color-mix(in oklch, var(--yes) 35%, transparent)" }}>
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--yes)" }} /> live
+              </span>
             </div>
 
-            <div style={{ marginTop: 18 }}>
-              <div style={{ height: 6, borderRadius: 6, background: "var(--surface)", overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${winPct}%`, background: "var(--accent)", borderRadius: 6 }} />
-              </div>
-              <div className="mono" style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--faint)", marginTop: 7 }}>
-                <span>opened {ELECTION.opensLabel}</span>
-                <span>closes {ELECTION.closesLabel}</span>
-              </div>
-            </div>
+            <p style={{ color: "var(--muted)", fontSize: 13.5, lineHeight: 1.5, margin: "14px 0 0" }}>
+              Always open — no fixed end date. Verified Dutch citizens only; every answer is provable on-chain.
+            </p>
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <Stat value={`${ELECTION.daysLeft}`} unit="days left" />
+              <Stat value={fmt(totalAnswers)} unit="verified answers" live />
               <div style={{ width: 1, background: "var(--line-soft)" }} />
-              <Stat value={fmt(ELECTION.voters)} unit="citizens voted" live />
+              <Stat value={`${QUESTIONS.length}`} unit="questions open" />
             </div>
           </div>
 
@@ -161,7 +159,7 @@ function QuestionCard({ index, q, tally, staged, cast, onPick }) {
   const total = tally.reduce((a, c) => a + c, 0);
   const pct = (i) => (total === 0 ? 0 : Math.round((tally[i] / total) * 100));
   const locked = cast !== undefined;
-  const leadingIdx = tally.indexOf(Math.max(...tally));
+  const leadingIdx = total === 0 ? -1 : tally.indexOf(Math.max(...tally));
 
   return (
     <div className="card" style={{ padding: 20 }}>
@@ -245,13 +243,11 @@ export function Recount({ tallies, ledger, cast, onBack, onTryAgain }) {
         </div>
 
         <div className="card" style={{ marginTop: 20, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-          <FactRow k="contract" v={CONTRACT_FULL} />
+          <FactRow k="contract" v={CONTRACT_FULL} href={ETHERSCAN} />
           <div style={{ height: 1, background: "var(--line-soft)" }} />
           <FactRow k="network" v={`${CHAIN.name} · ${CHAIN.eco} · chainId ${CHAIN.id}`} />
           <div style={{ height: 1, background: "var(--line-soft)" }} />
-          <FactRow k="election scope" v={ELECTION.scope} />
-          <div style={{ height: 1, background: "var(--line-soft)" }} />
-          <FactRow k="closes" v={`${ELECTION.closesLabel} · ${ELECTION.daysLeft} days left`} />
+          <FactRow k="poll scope" v={ELECTION.scope} />
         </div>
 
         {yourBallot.length > 0 && (
@@ -275,16 +271,21 @@ export function Recount({ tallies, ledger, cast, onBack, onTryAgain }) {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "26px 0 12px" }}>
           <span className="eyebrow">Recent on-chain votes</span>
-          <span className="eyebrow" style={{ color: "var(--muted)" }}>{fmt(totalVotes)} total</span>
+          {totalVotes > 0 && <span className="eyebrow" style={{ color: "var(--muted)" }}>{fmt(totalVotes)} total</span>}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {ledger.map((b, i) => <LedgerRow key={i} b={b} />)}
-          <div className="mono" style={{ textAlign: "center", color: "var(--faint)", fontSize: 12, padding: "8px 0" }}>+ {fmt(totalVotes - ledger.length)} more on-chain</div>
-        </div>
+        {ledger.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {ledger.map((b, i) => <LedgerRow key={i} b={b} />)}
+          </div>
+        ) : (
+          <div className="card" style={{ padding: 18, textAlign: "center", color: "var(--faint)", fontSize: 13, lineHeight: 1.5 }}>
+            No on-chain votes yet — be the first verified citizen to answer.
+          </div>
+        )}
 
-        <div className="card" style={{ marginTop: 6, padding: 16, borderColor: "color-mix(in oklch, var(--yes) 28%, var(--line-soft))", display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="card" style={{ marginTop: 16, padding: 16, borderColor: "color-mix(in oklch, var(--yes) 28%, var(--line-soft))", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ width: 26, height: 26, borderRadius: 999, background: "var(--yes)", color: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Ic.check s={16} /></span>
-          <span style={{ fontWeight: 600, fontSize: 14.5 }}>Recount matches the live results on every question.</span>
+          <span style={{ fontWeight: 600, fontSize: 14.5 }}>The totals here come straight from the contract — recount them yourself, anytime.</span>
         </div>
 
         <div style={{ display: "flex", gap: 11, marginTop: 16, padding: "0 2px", color: "var(--faint)", fontSize: 12.5, lineHeight: 1.55 }}>
@@ -303,11 +304,15 @@ export function Recount({ tallies, ledger, cast, onBack, onTryAgain }) {
   );
 }
 
-function FactRow({ k, v }) {
+function FactRow({ k, v, href }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <span style={{ fontSize: 11.5, color: "var(--faint)" }}>{k}</span>
-      <span className="mono" style={{ fontSize: 12.5, color: "var(--text)", wordBreak: "break-all", lineHeight: 1.4 }}>{v}</span>
+      {href ? (
+        <a className="mono" href={href} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: "var(--accent)", wordBreak: "break-all", lineHeight: 1.4, textDecoration: "none" }}>{v} ↗</a>
+      ) : (
+        <span className="mono" style={{ fontSize: 12.5, color: "var(--text)", wordBreak: "break-all", lineHeight: 1.4 }}>{v}</span>
+      )}
     </div>
   );
 }

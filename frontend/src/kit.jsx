@@ -96,9 +96,11 @@ export const fmt = (n) => n.toLocaleString("en-US");
 const hexs = (len = 4) => Array.from({ length: len }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
 export const newNullifier = () => `0x${hexs(4)}${hexs(4)}…${hexs(4)}`;
 
-export const CONTRACT = "0x9a7D…4f2e8A3b";
-export const CONTRACT_FULL = "0x9a7De1b4c0F2e8A3b51C7D6e0F4a2B8c1D3E5f60";
-export const CHAIN = { name: "Moonriver", eco: "Kusama", id: 1285 };
+// The real deployed poll contract (verifies live zkPassport proofs). Recount points here.
+export const CONTRACT = "0x6b34…36663";
+export const CONTRACT_FULL = "0x6b34c201C947B3951d939A18548F6004BE136663";
+export const CHAIN = { name: "Ethereum Sepolia", eco: "testnet", id: 11155111 };
+export const ETHERSCAN = "https://sepolia.etherscan.io/address/0x6b34c201C947B3951d939A18548F6004BE136663";
 
 const PALETTE = [
   "oklch(0.77 0.12 60)", "oklch(0.74 0.11 205)", "oklch(0.72 0.12 295)",
@@ -107,48 +109,39 @@ const PALETTE = [
 export const colorsFor = (choices) =>
   choices.length === 2 ? ["var(--no)", "var(--yes)"] : choices.map((_, i) => PALETTE[i % PALETTE.length]);
 
+// An always-open poll — no fixed cadence, no end date. Verified citizens answer over time.
 export const ELECTION = {
-  id: "nl-2026-summer", scope: "nl-2026-summer", country: "Netherlands",
-  title: "National Opinion Poll", opensLabel: "8 Jun 2026", closesLabel: "8 Sep 2026",
-  windowDays: 92, daysLeft: 89, voters: 164380,
+  id: "nl-live-2026", scope: "nl-live-2026", country: "Netherlands",
+  title: "Live opinion poll",
 };
 
 export const QUESTIONS = [
   { id: "q-trains", tag: "Transport", short: "Cheaper trains",
     text: "Should domestic train travel be made cheaper than flying?",
-    choices: ["No", "Yes"], baseTally: [38211, 91044] },
+    choices: ["No", "Yes"] },
   { id: "q-vote16", tag: "Democracy", short: "Voting at 16",
     text: "Should 16- and 17-year-olds be allowed to vote in national elections?",
-    choices: ["No", "Yes"], baseTally: [51280, 40118] },
+    choices: ["No", "Yes"] },
   { id: "q-trump", tag: "World affairs", short: "Trump, honestly?",
     text: "Donald Trump is best described as…",
-    choices: ["A clown", "A statesman", "A stable genius", "Who?"], baseTally: [138904, 6212, 4087, 9810] },
+    choices: ["A clown", "A statesman", "A stable genius", "Who?"] },
   { id: "q-budget", tag: "Budget", short: "Top priority",
     text: "What should be the government's top spending priority?",
-    choices: ["Housing", "Healthcare", "Climate", "Defence"], baseTally: [34002, 28771, 19880, 9210] },
+    choices: ["Housing", "Healthcare", "Climate", "Defence"] },
   { id: "q-fireworks", tag: "Public safety", short: "Fireworks ban",
     text: "Should consumer fireworks be banned nationwide on New Year's Eve?",
-    choices: ["No", "Yes"], baseTally: [40110, 78220] },
+    choices: ["No", "Yes"] },
   { id: "q-stroopwafel", tag: "Settle it", short: "Stroopwafel @ 8am",
     text: "Is a stroopwafel an acceptable breakfast?",
-    choices: ["No", "Yes"], baseTally: [22140, 99882] },
+    choices: ["No", "Yes"] },
 ].map((q) => ({ ...q, colors: colorsFor(q.choices) }));
 
-export const baseTallies = () => Object.fromEntries(QUESTIONS.map((q) => [q.id, [...q.baseTally]]));
+// Real counts only. Every question starts at zero — no fabricated numbers, ever.
+export const baseTallies = () => Object.fromEntries(QUESTIONS.map((q) => [q.id, q.choices.map(() => 0)]));
 
-export function seedLedger(n = 8) {
-  const out = []; let t = 7;
-  for (let i = 0; i < n; i++) {
-    const q = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)];
-    const choice = Math.floor(Math.random() * q.choices.length);
-    out.push({
-      nullifier: newNullifier(), qid: q.id, qShort: q.short, choice,
-      label: q.choices[choice], color: q.colors[choice],
-      ago: t < 60 ? `${t}s ago` : `${Math.floor(t / 60)}m ago`,
-    });
-    t += Math.floor(6 + Math.random() * 30);
-  }
-  return out;
+// The recount ledger shows REAL on-chain votes. Empty until real votes exist — never seeded.
+export function seedLedger() {
+  return [];
 }
 
 /* QR placeholder — a believable stand-in, not a real encoding. */
