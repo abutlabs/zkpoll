@@ -1,10 +1,8 @@
-// App.jsx — one responsive experience. Platform is detected (not staged in device frames):
-//   phone browser  → verify on-device (deep-link to zkPassport)
-//   desktop browser → verify via QR, approve remotely. (Like DigiD.)
+// App.jsx — one responsive, bilingual (NL default / EN) experience. Honest preview (zero data).
 import React, { useState, useMemo, useEffect } from "react";
 import { Landing, Ballot, Recount } from "./screens.jsx";
 import { VerifySheet } from "./flow.jsx";
-import { QUESTIONS, baseTallies, seedLedger, newNullifier } from "./kit.jsx";
+import { Q, baseTallies, seedLedger, newNullifier } from "./kit.jsx";
 
 function detectPlatform() {
   if (typeof window === "undefined") return "mobile";
@@ -27,12 +25,15 @@ export default function App() {
   const platform = usePlatform();
   const desktop = platform === "desktop";
 
-  const [route, setRoute] = useState("landing");       // landing | ballot | recount
-  const [tallies, setTallies] = useState(baseTallies); // { qid: number[] }
-  const [staged, setStaged] = useState({});            // { qid: choiceIdx } not yet cast
-  const [cast, setCast] = useState({});                // { qid: { choice, nullifier } }
-  const [verify, setVerify] = useState(null);          // null | { answers, alreadyUsed }
-  const ledger = useMemo(() => seedLedger(8), []);
+  const [lang, setLang] = useState("nl"); // Dutch-first
+  const [route, setRoute] = useState("landing");        // landing | ballot | recount
+  const [tallies, setTallies] = useState(baseTallies);  // { qid: number[] } — real, starts at 0
+  const [staged, setStaged] = useState({});             // { qid: choiceIdx }
+  const [cast, setCast] = useState({});                 // { qid: { choice, nullifier } }
+  const [verify, setVerify] = useState(null);           // null | { answers, alreadyUsed }
+  const ledger = useMemo(() => seedLedger(), []);       // [] — no fabricated ledger
+
+  const questions = useMemo(() => Q(lang), [lang]);
 
   const pick = (qid, choice) => {
     if (cast[qid] !== undefined) return;
@@ -41,7 +42,7 @@ export default function App() {
 
   const startCast = () => {
     const answers = Object.entries(staged).map(([qid, choice]) => {
-      const q = QUESTIONS.find((x) => x.id === qid);
+      const q = questions.find((x) => x.id === qid);
       return { qid, short: q.short, choice, label: q.choices[choice], color: q.colors[choice], nullifier: newNullifier() };
     });
     setVerify({ answers, alreadyUsed: false });
@@ -49,7 +50,7 @@ export default function App() {
 
   const tryAgain = () => {
     const answers = Object.entries(cast).map(([qid, v]) => {
-      const q = QUESTIONS.find((x) => x.id === qid);
+      const q = questions.find((x) => x.id === qid);
       return { qid, short: q.short, choice: v.choice, label: q.choices[v.choice], color: q.colors[v.choice], nullifier: v.nullifier };
     });
     setVerify({ answers, alreadyUsed: true });
@@ -77,17 +78,17 @@ export default function App() {
 
   return (
     <div className={"app" + (desktop ? " desktop" : "")}>
-      {route === "landing" && <Landing onEnter={() => setRoute("ballot")} />}
+      {route === "landing" && <Landing lang={lang} setLang={setLang} onEnter={() => setRoute("ballot")} />}
       {route === "ballot" && (
-        <Ballot tallies={tallies} staged={staged} cast={cast} onPick={pick} onCast={startCast}
-          onRecount={() => setRoute("recount")} onReplay={replay} />
+        <Ballot lang={lang} setLang={setLang} questions={questions} tallies={tallies} staged={staged} cast={cast}
+          onPick={pick} onCast={startCast} onRecount={() => setRoute("recount")} onReplay={replay} />
       )}
       {route === "recount" && (
-        <Recount tallies={tallies} ledger={ledger} cast={cast}
+        <Recount lang={lang} setLang={setLang} questions={questions} tallies={tallies} ledger={ledger} cast={cast}
           onBack={() => setRoute("ballot")} onTryAgain={tryAgain} />
       )}
       {verify && (
-        <VerifySheet platform={platform} answers={verify.answers} alreadyUsed={verify.alreadyUsed}
+        <VerifySheet platform={platform} lang={lang} answers={verify.answers} alreadyUsed={verify.alreadyUsed}
           onClose={() => setVerify(null)} onResult={handleResult} />
       )}
     </div>

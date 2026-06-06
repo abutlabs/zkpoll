@@ -63,7 +63,8 @@ body {
 .top   { padding-top: max(34px, env(safe-area-inset-top)); }
 .bottom-safe { padding-bottom: max(34px, env(safe-area-inset-bottom)); }
 
-.app.desktop .pad { max-width: 680px; margin: 0 auto; }
+/* Desktop: a narrow centered reading column (matches the design) so text reads centered. */
+.app.desktop .pad { max-width: 440px; margin: 0 auto; }
 
 /* type */
 .eyebrow {
